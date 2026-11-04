@@ -1,0 +1,21 @@
+# CycloneShield AI — Sample Cyclone Track Data
+# Based on historical Bay of Bengal cyclone patterns
+# Data type: SAMPLE — Derived from IMD historical records (not real-time)
+# Reference: Similar to Cyclone Phailin (2013) track
+
+storm_id,storm_name,timestamp,latitude,longitude,intensity_category,wind_speed_kmh,pressure_hpa,status,source
+BOB2024_01,Cyclone AGNI,2024-10-22T00:00:00Z,8.5,86.2,Depression,55,998,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-22T06:00:00Z,9.1,85.8,Depression,60,996,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-22T12:00:00Z,9.8,85.3,Deep Depression,65,993,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-22T18:00:00Z,10.5,84.9,Deep Depression,70,990,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-23T00:00:00Z,11.3,84.4,Cyclonic Storm,85,985,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-23T06:00:00Z,12.1,83.8,Cyclonic Storm,95,980,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-23T12:00:00Z,13.0,83.2,Severe Cyclonic Storm,110,972,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-23T18:00:00Z,13.9,82.5,Severe Cyclonic Storm,125,965,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-24T00:00:00Z,14.9,81.8,Very Severe Cyclonic Storm,140,958,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-24T06:00:00Z,15.9,81.0,Very Severe Cyclonic Storm,155,950,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-24T12:00:00Z,17.0,80.2,Extremely Severe Cyclonic Storm,175,942,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-24T18:00:00Z,17.8,79.5,Extremely Severe Cyclonic Storm,185,935,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-25T00:00:00Z,18.6,79.0,Super Cyclonic Storm,200,928,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-25T06:00:00Z,19.3,78.8,Super Cyclonic Storm,210,922,Active,IMD-Sample
+BOB2024_01,Cyclone AGNI,2024-10-25T09:00:00Z,19.8,78.5,Super Cyclonic Storm,215,920,Landfall-Approaching,IMD-Sample
