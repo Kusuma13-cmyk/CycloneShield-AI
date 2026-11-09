@@ -80,10 +80,12 @@ def build_cyclone_track_map(track_data: list[dict], current_pos: dict = None) ->
     Build a Folium map showing the cyclone track with colour-coded intensity.
     """
     # Centre on Bay of Bengal
+    # CartoDB dark_matter requires a paid API key in Folium >= 0.18.
+    # OpenStreetMap is free and requires no key.
     fmap = folium.Map(
         location=[15.0, 82.0],
         zoom_start=5,
-        tiles="CartoDB dark_matter",
+        tiles="OpenStreetMap",
     )
 
     if not track_data:

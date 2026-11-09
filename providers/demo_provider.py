@@ -46,7 +46,7 @@ _DEMO_RESPONSES = {
         "confidence": 0.82
     },
     "impact": {
-        "analysis_summary": "⚠️ DEMO MODE — Impact assessment based on sample data",
+        "analysis_summary": "⚠️ DEMO MODE — Impact assessment based on sample data. Not a real observation.",
         "overall_risk_level": "VERY HIGH",
         "risk_justification": "Super Cyclonic Storm with 215 km/h winds approaching densely populated Odisha coast",
         "affected_districts": [
@@ -57,16 +57,22 @@ _DEMO_RESPONSES = {
         ],
         "storm_surge_estimate_m": "3–5 metres above normal tide",
         "rainfall_forecast_mm": "200–400 mm in 24 hours",
+        "wind_damage_potential": "Severe structural damage expected — DEMO sample estimate only",
         "preparedness_actions": [
-            "Evacuate coastal communities within 5 km of shore",
-            "Open cyclone shelters in Ganjam and Puri districts",
-            "Issue school and office closures for Oct 25–26",
-            "Pre-position NDRF and ODRAF teams",
-            "Alert fishermen — no sea entry",
-            "Secure loose structures and signboards",
-            "Stock emergency supplies: water, food, medicines"
+            "Ensure emergency supply kits are ready (water, food, first aid)",
+            "Identify and note nearest cyclone shelter location",
+            "Charge all communication devices",
+            "Secure loose outdoor objects and signboards",
+            "Keep important documents in a waterproof bag",
+            "Follow official IMD and NDMA advisories",
+            "Alert fishermen — no sea entry until all-clear",
+            "Pre-position NDRF teams at vulnerable points"
         ],
-        "official_warning_note": "This is an AI-generated assessment. Official warnings must come from IMD. Call 1800-180-1717.",
+        "vulnerable_groups": ["Elderly", "Children", "Coastal fishing communities", "Differently-abled"],
+        "infrastructure_at_risk": ["Coastal roads", "Power lines", "Fishing boats", "Agricultural crops"],
+        "recommended_alert_level": "ORANGE",
+        "imd_contact": "Call IMD: 1800-180-1717 | mausam.imd.gov.in | NDMA: 011-26701700",
+        "official_warning_note": "⚠️ DEMO/SAMPLE DATA — This is an AI-generated decision-support assessment ONLY. It is NOT an official IMD warning. For official alerts, contact IMD at 1800-180-1717 or visit mausam.imd.gov.in.",
         "data_source": "sample",
         "confidence": 0.79
     }

@@ -152,8 +152,11 @@ Return ONLY the JSON object."""
         parsed = _build_fallback_impact_output(cyclone_analysis, initial_risk)
         log_agent_event(AGENT_NAME, "error", status="error", error_msg="LLM output not JSON — using fallback")
 
+    # Mark data_source accurately
     if llm_response.is_demo:
         parsed["data_source"] = "sample"
+    elif llm_response.provider == "granite" and not llm_response.error:
+        parsed["ai_assessed_by"] = f"IBM Granite ({llm_response.model})"
 
     # Always enforce official warning disclaimer
     parsed["official_warning_note"] = (

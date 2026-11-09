@@ -169,11 +169,19 @@ Return ONLY the JSON object. No explanation text outside the JSON."""
         parsed = _build_fallback_output(stats_summary, valid_readings)
         log_agent_event(AGENT_NAME, "error", status="error", error_msg="LLM output not JSON — using fallback")
 
-    # Ensure data_source is marked correctly
+    # Mark data_source accurately
     if llm_response.is_demo:
         parsed["data_source"] = "sample"
+    elif llm_response.provider == "granite" and not llm_response.error:
+        # Live AI analysis — actual data source depends on weather input
+        existing_src = parsed.get("data_source", "")
+        if existing_src not in ("live_open_meteo", "live_openweathermap", "live"):
+            parsed["data_source"] = "sample"  # data from sample CSV, AI is live
+        parsed["ai_assessed_by"] = f"IBM Granite ({llm_response.model})"
     parsed["timestamp"] = datetime.now(timezone.utc).isoformat()
     parsed["_stats"] = stats_summary
+    # Preserve raw readings for dashboard chart rendering (live data vs sample CSV)
+    parsed["_raw_readings"] = valid_readings
 
     duration_ms = (time.perf_counter() - start_time) * 1000
     log_agent_event(

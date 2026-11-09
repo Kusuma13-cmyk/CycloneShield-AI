@@ -2,7 +2,13 @@
 CycloneShield AI — Main Streamlit Application
 Agentic AI-based Cyclone Detection & Early Warning System for coastal India
 
-Run with: python -m streamlit run app.py
+IMPORTANT — correct launch command (must use .venv Python 3.13):
+  Windows CMD:        run.bat
+  PowerShell:         .\.venv\Scripts\python.exe -m streamlit run app.py --server.port 8503
+  Cross-platform:     .venv/bin/python -m streamlit run app.py --server.port 8503
+
+ibm-watsonx-ai requires Python <3.15. If you see the SDK error, you are using the
+wrong Python interpreter. Python 3.15 cannot install ibm-watsonx-ai.
 """
 import os
 import sys
@@ -28,6 +34,52 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ── Early SDK environment diagnostic ─────────────────────────────────────────
+# Run BEFORE any provider import so the user sees the fix immediately.
+def _check_sdk_environment() -> dict:
+    """
+    Check whether ibm-watsonx-ai is importable in this interpreter.
+    Returns a dict with keys: sdk_ok, sdk_version, python_version, interpreter_path, fix_cmd.
+    """
+    py_ver = sys.version.split()[0]
+    interp = sys.executable
+    try:
+        import ibm_watsonx_ai as _ibm
+        return {
+            "sdk_ok": True,
+            "sdk_version": _ibm.__version__,
+            "python_version": py_ver,
+            "interpreter_path": interp,
+            "fix_cmd": None,
+        }
+    except ImportError:
+        # Determine fix command based on Python version
+        py_tuple = tuple(int(x) for x in py_ver.split(".")[:2])
+        if py_tuple >= (3, 15):
+            reason = (
+                f"Python {py_ver} detected — ibm-watsonx-ai requires Python <3.15. "
+                "You are using the system Python, not the project .venv (Python 3.13)."
+            )
+            fix = (
+                "Use the .venv interpreter:\n"
+                "  PowerShell:  .venv\\Scripts\\python.exe -m streamlit run app.py --server.port 8503\n"
+                "  CMD:         run.bat\n"
+                "  Or activate: .venv\\Scripts\\activate  then  streamlit run app.py --server.port 8503"
+            )
+        else:
+            reason = f"ibm-watsonx-ai not installed in this interpreter ({interp})"
+            fix = "pip install ibm-watsonx-ai>=1.9.1"
+        return {
+            "sdk_ok": False,
+            "sdk_version": None,
+            "python_version": py_ver,
+            "interpreter_path": interp,
+            "fix_cmd": fix,
+            "reason": reason,
+        }
+
+_SDK_ENV = _check_sdk_environment()
 
 # ── Imports after path setup ──────────────────────────────────────────────────
 from orchestration.coordinator import (
@@ -167,7 +219,19 @@ def render_sidebar():
             "LLM Provider",
             ["auto", "demo", "granite"],
             key="sidebar_provider",
+            help=(
+                "auto = use IBM Granite if credentials configured, else demo\n"
+                "demo = pre-written demo responses (no IBM API calls)\n"
+                "granite = force IBM Granite (ibm/granite-4-h-small); shows error if no credentials"
+            ),
         )
+        live_wx = st.toggle(
+            "Use live weather (Open-Meteo)",
+            value=st.session_state.get("use_live_weather", True),
+            key="sidebar_live_weather",
+            help="On = fetch real current weather from Open-Meteo (free API, no key needed). Off = use sample CSV.",
+        )
+        st.session_state.use_live_weather = live_wx
 
         if st.button("🚀 Run Analysis", use_container_width=True, type="primary"):
             st.session_state.provider_override = "" if provider == "auto" else provider
@@ -189,9 +253,37 @@ def render_sidebar():
             st.markdown("**Status:** ⚪ Not started")
 
         st.divider()
-        app_mode = os.getenv("APP_MODE", "demo")
-        st.markdown(f"**Mode:** {'🔵 Demo' if app_mode == 'demo' else '🟢 Live'}")
-        st.caption("CycloneShield AI v1.0 | Hackathon Edition")
+        # Show ACTUAL operating mode — read from active session, not just env var
+        from providers.factory import get_provider_mode
+        mode_info = get_provider_mode()
+        if session and session.ai_mode == "live":
+            st.markdown("**AI Mode:** 🟢 **LIVE** (IBM Granite)")
+            st.markdown(f"**Model:** `{session.model_name}`")
+        elif session and session.ai_mode == "demo":
+            st.markdown("**AI Mode:** 🔵 **DEMO** (sample data)")
+        elif mode_info["mode"] == "live":
+            st.markdown("**AI Mode:** 🟢 **LIVE** (IBM Granite)")
+            st.markdown(f"**Model:** `{mode_info['model_name']}`")
+        elif mode_info["mode"] == "misconfigured":
+            st.markdown("**AI Mode:** 🔴 **CONFIG ERROR**")
+            st.caption(mode_info.get("reason", ""))
+        else:
+            st.markdown("**AI Mode:** 🔵 **DEMO** (no credentials)")
+            st.caption(mode_info.get("reason", ""))
+        if session:
+            st.markdown(f"**Data:** {session.data_source_label}")
+
+        # SDK / interpreter health indicator
+        if not _SDK_ENV["sdk_ok"]:
+            st.divider()
+            st.error(
+                f"⚠️ **SDK Missing**\n\n"
+                f"Python {_SDK_ENV['python_version']} — "
+                f"ibm-watsonx-ai not available.\n\n"
+                f"**Fix:** Use `.venv` interpreter.\n"
+                f"See Settings → SDK Diagnostic."
+            )
+        st.caption("CycloneShield AI v1.0")
 
 
 # ── Run analysis trigger ──────────────────────────────────────────────────────
@@ -212,7 +304,7 @@ def maybe_run_analysis():
         session = run_full_analysis(
             location="Odisha and Andhra Pradesh coast, Bay of Bengal",
             provider_override=st.session_state.provider_override,
-            data_mode="sample",
+            data_mode="auto",
             use_live_weather=st.session_state.use_live_weather,
             progress_callback=update_progress,
         )
@@ -270,12 +362,20 @@ def page_overview():
     if alert in ("RED", "ORANGE"):
         alert_banner(alert, f"{risk} risk — {cyclone_out.get('storm_name', 'Cyclone')} | {intensity}")
     
-    # Demo banner
-    if session.provider_name == "demo":
+    # Mode banner — always show clearly
+    if session.ai_mode == "live":
         st.markdown(
-            '<div class="demo-banner">⚠️ <strong>DEMO MODE</strong> — '
-            'All results are based on sample data. Not real weather observations. '
-            'Configure an API key in .env to enable live AI analysis.</div>',
+            f'<div style="background:#00332211;border:1px solid #00C853;border-radius:6px;'
+            f'padding:10px 16px;font-size:0.85em;color:#A5D6A7;margin:8px 0;">'
+            f'🟢 <strong>LIVE AI MODE</strong> — IBM Granite ({session.model_name}) | '
+            f'Weather: {session.data_source_label}</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            '<div class="demo-banner">🔵 <strong>DEMO MODE</strong> — '
+            'All results are based on sample/pre-written data. Not real AI responses. '
+            'Configure IBM credentials in .env to enable Live AI (ibm/granite-4-h-small).</div>',
             unsafe_allow_html=True
         )
 
@@ -322,9 +422,11 @@ def page_overview():
     with col2:
         st.markdown('<div class="section-header">Analysis Info</div>', unsafe_allow_html=True)
         st.markdown(f"**Session:** `{session.session_id}`")
-        st.markdown(f"**Provider:** {session.provider_name} ({session.llm_eval.get('models_used', ['?'])[0] if session.llm_eval else '?'})")
+        ai_badge = "🟢 LIVE" if session.ai_mode == "live" else "🔵 DEMO"
+        st.markdown(f"**AI Mode:** {ai_badge}")
+        st.markdown(f"**Model:** `{session.model_name}`")
+        st.markdown(f"**Data Source:** {session.data_source_label}")
         st.markdown(f"**Total Time:** {session.total_duration_ms:.0f} ms")
-        st.markdown(f"**Data Mode:** {session.data_mode}")
         st.markdown(f"**Errors:** {len(session.errors)}")
         if session.errors:
             for err in session.errors:
@@ -344,9 +446,17 @@ def page_weather_intelligence():
         st.warning("Weather agent produced no output.")
         return
 
-    # Demo warning
-    if session.provider_name == "demo":
-        st.markdown('<div class="demo-banner">⚠️ SAMPLE DATA — Not real observations</div>', unsafe_allow_html=True)
+    # Mode/data source banner
+    if session.ai_mode == "demo":
+        st.markdown('<div class="demo-banner">🔵 DEMO MODE — Pre-written responses, not real AI or real weather data</div>', unsafe_allow_html=True)
+    else:
+        src = session.data_source_label
+        st.markdown(
+            f'<div style="background:#00332211;border:1px solid #00C853;border-radius:6px;'
+            f'padding:8px 14px;font-size:0.85em;color:#A5D6A7;margin:6px 0;">'
+            f'🟢 LIVE AI — IBM Granite ({session.model_name}) | Weather data: {src}</div>',
+            unsafe_allow_html=True
+        )
 
     col1, col2, col3 = st.columns(3)
     stats = weather_out.get("_stats", {})
@@ -393,18 +503,31 @@ def page_weather_intelligence():
         conf = weather_out.get("confidence", 0)
         st.markdown(f"**Confidence:** {conf:.0%}")
 
-    # Charts
+    # Charts — use live data from session if available, otherwise sample
     try:
-        weather_data = load_sample_weather_data()
-        df = pd.DataFrame(weather_data)
+        _weather_cache = weather_out.get("_raw_readings") or []
+        if _weather_cache:
+            weather_data_for_chart = _weather_cache
+            chart_src = session.data_source_label
+        else:
+            weather_data_for_chart = load_sample_weather_data()
+            chart_src = "sample CSV"
+        df = pd.DataFrame(weather_data_for_chart)
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+        # Coerce numeric fields
+        for col_name in ["pressure_hpa", "wind_speed_kmh", "humidity_pct"]:
+            if col_name in df.columns:
+                df[col_name] = pd.to_numeric(df[col_name], errors="coerce")
         df = df.dropna(subset=["pressure_hpa", "wind_speed_kmh"])
         if not df.empty:
+            st.caption(f"Chart data source: {chart_src} | {len(df)} readings")
             col1, col2 = st.columns(2)
             with col1:
                 st.plotly_chart(pressure_chart(df), use_container_width=True)
             with col2:
                 st.plotly_chart(wind_speed_chart(df), use_container_width=True)
+        else:
+            st.info("No numeric weather data available for charting.")
     except Exception as e:
         st.info(f"Chart error: {e}")
 
@@ -424,8 +547,16 @@ def page_cyclone_detection():
         st.warning("Cyclone agent produced no output.")
         return
 
-    if session.provider_name == "demo":
-        st.markdown('<div class="demo-banner">⚠️ SAMPLE DATA — Not real cyclone data</div>', unsafe_allow_html=True)
+    if session.ai_mode == "demo":
+        st.markdown('<div class="demo-banner">🔵 DEMO MODE — Pre-written cyclone analysis, not real detection</div>', unsafe_allow_html=True)
+    else:
+        ai_by = cyclone_out.get("ai_assessed_by", f"IBM Granite ({session.model_name})")
+        st.markdown(
+            f'<div style="background:#00332211;border:1px solid #00C853;border-radius:6px;'
+            f'padding:8px 14px;font-size:0.85em;color:#A5D6A7;margin:6px 0;">'
+            f'🟢 LIVE AI — AI assessed by {ai_by} | Track data: sample CSV (no live cyclone API)</div>',
+            unsafe_allow_html=True
+        )
 
     detected = cyclone_out.get("cyclone_detected", False)
 
@@ -477,8 +608,10 @@ def page_cyclone_tracking():
 
     session: AnalysisSession = st.session_state.analysis_session
 
-    if session and session.provider_name == "demo":
-        st.markdown('<div class="demo-banner">⚠️ SAMPLE TRACK DATA — Not a real cyclone track</div>', unsafe_allow_html=True)
+    if session and session.ai_mode == "demo":
+        st.markdown('<div class="demo-banner">🔵 DEMO MODE — Sample cyclone track, not real-time data</div>', unsafe_allow_html=True)
+    elif session:
+        st.info("ℹ️ Track data: sample CSV (Cyclone AGNI illustrative). No live cyclone track API is integrated. AI analysis is real (IBM Granite).")
 
     track_data = load_sample_track_data()
 
@@ -506,15 +639,16 @@ def page_cyclone_tracking():
         folium_static(fmap, width=1100, height=500)
     else:
         st.info("Map display requires streamlit-folium. Install with: pip install streamlit-folium")
-        # Fallback: Plotly scatter map
+        # Fallback: Plotly scatter map (Plotly 6+ uses scatter_map with map_style)
         track_df = pd.DataFrame(track_data)
         track_df = track_df.dropna(subset=["latitude", "longitude"])
-        fig = __import__("plotly.express", fromlist=["scatter_mapbox"]).scatter_mapbox(
+        import plotly.express as _px
+        fig = _px.scatter_map(
             track_df, lat="latitude", lon="longitude",
             color="intensity_category",
             hover_name="storm_name",
             hover_data=["wind_speed_kmh", "pressure_hpa", "timestamp"],
-            mapbox_style="carto-darkmatter",
+            map_style="carto-darkmatter",
             zoom=4, height=500,
         )
         st.plotly_chart(fig, use_container_width=True)
@@ -532,7 +666,15 @@ def page_cyclone_tracking():
         display_df = track_df[[c for c in display_cols if c in track_df.columns]]
         st.dataframe(display_df, use_container_width=True)
 
-    st.caption(f"⚠️ Data source: {latest.get('source', 'Sample')} — Not a real-time official cyclone track")
+    st.error(
+        "⚠️ **SAMPLE DATA** — 'Cyclone AGNI' is a fictional illustrative cyclone "
+        "based on historical Bay of Bengal patterns. It is NOT a real current cyclone. "
+        "For official real-time cyclone information: "
+        "[IMD](https://mausam.imd.gov.in) · "
+        "[INCOIS](https://incois.gov.in) · "
+        "Call IMD: **1800-180-1717**"
+    )
+    st.caption(f"Source: {latest.get('source', 'IMD-Sample')} | Track timestamps are historical, not current | No live cyclone track API integrated")
 
 
 def page_impact_assessment():
@@ -548,8 +690,16 @@ def page_impact_assessment():
         st.warning("Impact agent produced no output.")
         return
 
-    if session.provider_name == "demo":
-        st.markdown('<div class="demo-banner">⚠️ SAMPLE DATA — Not a real impact assessment</div>', unsafe_allow_html=True)
+    if session.ai_mode == "demo":
+        st.markdown('<div class="demo-banner">🔵 DEMO MODE — Pre-written impact assessment, not real AI analysis</div>', unsafe_allow_html=True)
+    else:
+        ai_by = impact_out.get("ai_assessed_by", f"IBM Granite ({session.model_name})")
+        st.markdown(
+            f'<div style="background:#00332211;border:1px solid #00C853;border-radius:6px;'
+            f'padding:8px 14px;font-size:0.85em;color:#A5D6A7;margin:6px 0;">'
+            f'🟢 LIVE AI — Impact assessed by {ai_by}</div>',
+            unsafe_allow_html=True
+        )
 
     risk = impact_out.get("overall_risk_level", "?")
     alert = impact_out.get("recommended_alert_level", "?")
@@ -622,6 +772,36 @@ def page_early_warning():
 
     alert = impact_out.get("recommended_alert_level", "GREEN")
     risk = impact_out.get("overall_risk_level", "MINIMAL")
+    review_status = session.human_review_status
+
+    # Review gate — prominent banner
+    if review_status == "pending":
+        st.warning(
+            "⏳ **Awaiting Human Review** — This warning has NOT been verified by a human operator. "
+            "Go to **Human Verification** page to review and approve/reject before acting on this alert."
+        )
+    elif review_status == "approved":
+        st.success(
+            f"✅ **Reviewed and Approved** by {session.human_reviewer} at "
+            f"{session.review_timestamp[:19] if session.review_timestamp else '?'} UTC"
+        )
+    elif review_status == "rejected":
+        st.error(
+            f"❌ **Rejected** by {session.human_reviewer} — "
+            f"Notes: {session.human_notes or 'No notes'}"
+        )
+
+    # Mode banner
+    if session.ai_mode == "demo":
+        st.markdown('<div class="demo-banner">🔵 DEMO MODE — These alerts are based on SAMPLE data. Not real AI. Not a real warning.</div>', unsafe_allow_html=True)
+    elif session.data_mode == "sample":
+        st.markdown(
+            '<div style="background:#1A237E22;border:1px solid #3F51B5;border-radius:6px;'
+            'padding:10px 16px;font-size:0.85em;color:#9FA8DA;margin:8px 0;">'
+            '🟢 LIVE AI (IBM Granite) | ⚠️ SAMPLE cyclone track (no real-time cyclone API) | '
+            'Open-Meteo weather data</div>',
+            unsafe_allow_html=True
+        )
 
     # Big alert display
     color = ALERT_COLORS.get(alert, "#69F0AE")
@@ -632,9 +812,27 @@ def page_early_warning():
         f'<div style="font-size:1.2em;color:#dde;margin-top:8px;">'
         f'Risk Level: {risk} | {cyclone_out.get("storm_name", "?")} — '
         f'{cyclone_out.get("current_intensity", "?")}</div>'
+        f'<div style="font-size:0.85em;color:#aaa;margin-top:6px;">'
+        f'AI Mode: {session.ai_mode.upper()} | Data: {session.data_source_label} | '
+        f'Review: {review_status.upper()}</div>'
         f'</div>',
         unsafe_allow_html=True
     )
+
+    # Evidence section — required for any human review
+    with st.expander("📋 Evidence & Source Information (required for human review)", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Analysis Evidence**")
+            st.markdown(f"- AI Provider: `{session.provider_name}` (`{session.model_name}`)")
+            st.markdown(f"- AI Mode: `{session.ai_mode}` (live = real IBM Granite response)")
+            st.markdown(f"- Weather Data: `{session.data_source_label}`")
+            st.markdown(f"- Cyclone Track: `SAMPLE — Cyclone AGNI is illustrative only`")
+            st.markdown(f"- Session ID: `{session.session_id}`")
+            st.markdown(f"- Analysis time: `{session.end_time[:19] if session.end_time else '?'} UTC`")
+        with col2:
+            st.markdown("**Risk Justification**")
+            st.write(impact_out.get("risk_justification", "No justification provided."))
 
     col1, col2 = st.columns(2)
     with col1:
@@ -662,13 +860,23 @@ def page_early_warning():
 
     st.markdown("---")
     st.error(
-        "⚠️ **IMPORTANT DISCLAIMER**: This AI system provides decision-support only. "
-        "It does NOT issue official government warnings. Always follow official IMD bulletins. "
-        "Contact IMD at **1800-180-1717** for verified cyclone information."
+        "⚠️ **EDUCATIONAL PROTOTYPE ONLY** — This AI system provides decision-support only. "
+        "It does NOT issue official government warnings. "
+        "CycloneShield AI has NOT verified any real cyclone. "
+        "The 'Cyclone AGNI' track is a fictional sample — not a real active system. "
+        "Always consult official IMD bulletins. Call IMD: **1800-180-1717**"
     )
-    st.caption(f"Data source: {impact_out.get('data_source', 'sample')} | "
-               f"Confidence: {impact_out.get('confidence', 0):.0%} | "
-               f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    conf_val = impact_out.get("confidence", 0)
+    if isinstance(conf_val, (int, float)):
+        conf_str = f"{conf_val:.0%}"
+    else:
+        conf_str = str(conf_val)
+    st.caption(
+        f"Data source: {impact_out.get('data_source', 'sample')} | "
+        f"AI confidence: {conf_str} | "
+        f"Review: {review_status} | "
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+    )
 
 
 def page_multi_agent():
@@ -931,59 +1139,170 @@ def page_model_evaluation():
 
 
 def page_settings():
-    st.markdown('<div class="section-header">⚙️ Settings & API Configuration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">⚙️ Settings & Configuration Diagnostics</div>', unsafe_allow_html=True)
 
-    st.markdown("### API Key Status")
+    from providers.factory import get_provider_mode
+    mode_info = get_provider_mode()
+
+    # ── SDK / Interpreter Diagnostic ─────────────────────────────────────────
+    st.markdown("### 🐍 SDK & Python Environment")
+    if _SDK_ENV["sdk_ok"]:
+        st.success(
+            f"✅ **ibm-watsonx-ai {_SDK_ENV['sdk_version']}** installed\n\n"
+            f"Python {_SDK_ENV['python_version']} | Interpreter: `{_SDK_ENV['interpreter_path']}`"
+        )
+    else:
+        st.error(
+            f"❌ **ibm-watsonx-ai NOT available in this interpreter**\n\n"
+            f"Reason: {_SDK_ENV.get('reason', 'import failed')}\n\n"
+            f"Python: {_SDK_ENV['python_version']} | Interpreter: `{_SDK_ENV['interpreter_path']}`"
+        )
+        st.warning(
+            "**Fix required:**\n\n"
+            + _SDK_ENV.get("fix_cmd", "Install ibm-watsonx-ai>=1.9.1 in this interpreter.")
+        )
+        st.info(
+            "**Why this happens:** The system `streamlit` command uses Python 3.15 which "
+            "does NOT support `ibm-watsonx-ai` (all versions require Python <3.15). "
+            "You must use the `.venv` interpreter (Python 3.13) which has the SDK installed.\n\n"
+            "**Correct launch commands:**\n"
+            "```\n"
+            "# PowerShell:\n"
+            ".venv\\Scripts\\python.exe -m streamlit run app.py --server.port 8503\n\n"
+            "# Or use the launcher:\n"
+            "run.bat   (Windows CMD)\n"
+            ".\\run.ps1  (PowerShell)\n"
+            "```"
+        )
+
+    st.markdown("---")
+
+    # ── Current Operating Mode ────────────────────────────────────────────────
+    st.markdown("### 🤖 AI Provider Status")
+    if mode_info["mode"] == "live":
+        st.success(
+            f"🟢 **LIVE AI MODE** — IBM Granite (`{mode_info['model_name']}`) is active.\n\n"
+            f"Real IBM watsonx.ai responses will be used for all three agents."
+        )
+    elif mode_info["mode"] == "misconfigured":
+        st.error(
+            f"🔴 **CONFIGURATION ERROR** — APP_MODE=live is set but credentials are missing.\n\n"
+            f"Reason: {mode_info.get('reason', 'credentials not configured')}\n\n"
+            f"Set IBM_GRANITE_API_KEY and IBM_GRANITE_PROJECT_ID in .env to fix this."
+        )
+    else:
+        st.info(
+            f"🔵 **DEMO MODE** — No real AI responses.\n\n"
+            f"Reason: {mode_info.get('reason', 'credentials not configured')}\n\n"
+            f"Configure IBM watsonx.ai credentials below to enable Live AI."
+        )
+
+    # ── Connectivity Test (safe — only when explicitly clicked) ──────────────
+    if _SDK_ENV["sdk_ok"]:
+        ibm_key = os.getenv("IBM_GRANITE_API_KEY", "")
+        ibm_pid = os.getenv("IBM_GRANITE_PROJECT_ID", "")
+        placeholders_ibm = {"", "your_ibm_api_key_here", "your_ibm_project_id_here"}
+        ibm_creds_ok = (
+            bool(ibm_key) and ibm_key not in placeholders_ibm
+            and bool(ibm_pid) and ibm_pid not in placeholders_ibm
+        )
+
+        if ibm_creds_ok:
+            if st.button(
+                "🔍 Test IBM Granite Connectivity (sends one real API request)",
+                type="secondary",
+                help="Sends a minimal test prompt to ibm/granite-4-h-small. Requires valid credentials. Does NOT display your API key.",
+            ):
+                with st.spinner("Testing IBM Granite (ibm/granite-4-h-small) via chat API…"):
+                    try:
+                        from providers.granite import GraniteProvider
+                        _test_p = GraniteProvider()
+                        _test_resp = _test_p.complete(
+                            prompt="Reply with: {\"ping\":\"pong\"}",
+                            system_prompt="You are a test system. Reply only with valid JSON.",
+                            max_tokens=20,
+                        )
+                        if _test_resp.success:
+                            st.success(
+                                f"✅ **IBM Granite ibm/granite-4-h-small responded successfully**\n\n"
+                                f"Tokens: {_test_resp.total_tokens} | Latency: {_test_resp.latency_ms:.0f} ms\n\n"
+                                f"Response preview: `{_test_resp.text[:80]}`"
+                            )
+                        else:
+                            st.error(f"❌ Granite returned an error: {_test_resp.error}")
+                    except Exception as _e:
+                        st.error(f"❌ Connectivity test failed: {_e}")
+        else:
+            st.caption("Configure IBM credentials in .env to enable the connectivity test.")
+
+    st.markdown("---")
+    st.markdown("### 🔑 API Key Status")
     st.markdown("""
     API keys are read from a `.env` file in the project root.
-    **Never enter API keys directly in this form** — use the `.env` file.
+    **Never enter API keys directly in this UI** — use the `.env` file only.
+    Credentials are never displayed, logged, or committed to git.
     """)
 
-    # Show configured status (never show actual keys)
-    providers_status = {
-        "IBM watsonx.ai (Granite)": bool(os.getenv("IBM_GRANITE_API_KEY") and os.getenv("IBM_GRANITE_PROJECT_ID")),
-        "OpenWeatherMap": bool(os.getenv("OPENWEATHER_API_KEY")),
-    }
+    ibm_key = os.getenv("IBM_GRANITE_API_KEY", "")
+    ibm_pid = os.getenv("IBM_GRANITE_PROJECT_ID", "")
+    owm_key = os.getenv("OPENWEATHER_API_KEY", "")
+    placeholders = {"", "your_ibm_api_key_here", "your_ibm_project_id_here"}
+    ibm_ok = bool(ibm_key) and ibm_key not in placeholders and bool(ibm_pid) and ibm_pid not in placeholders
 
-    for provider, configured in providers_status.items():
+    providers_status = {
+        f"IBM watsonx.ai Granite (`{mode_info['model_name']}`)": ibm_ok,
+        "OpenWeatherMap (optional — additional live weather)": bool(owm_key and owm_key not in {"", "your_openweather_api_key_here"}),
+        "Open-Meteo (free — no key required)": True,
+    }
+    for provider_name_disp, configured in providers_status.items():
         icon = "🟢" if configured else "⚪"
-        st.markdown(f"{icon} **{provider}**: {'Configured' if configured else 'Not configured'}")
+        st.markdown(f"{icon} **{provider_name_disp}**: {'Configured ✓' if configured else 'Not configured'}")
 
     st.markdown("---")
-    st.markdown("### .env Setup Instructions")
-    st.code("""
-# 1. Copy the example file:
-#    cp .env.example .env
+    st.markdown("### ⚙️ Current Configuration")
+    st.markdown(f"**APP_MODE:** `{os.getenv('APP_MODE', 'not set — auto-detecting from credentials')}`")
+    st.markdown(f"**IBM_GRANITE_URL:** `{os.getenv('IBM_GRANITE_URL', 'https://us-south.ml.cloud.ibm.com (default)')}`")
+    st.markdown(f"**IBM_GRANITE_API_KEY:** `{'[SET — not displayed]' if ibm_key and ibm_key not in placeholders else '[NOT SET]'}`")
+    st.markdown(f"**IBM_GRANITE_PROJECT_ID:** `{'[SET — not displayed]' if ibm_pid and ibm_pid not in {'', 'your_ibm_project_id_here'} else '[NOT SET]'}`")
+    st.markdown(f"**Open-Meteo (live weather):** `always available — no key required`")
+    st.markdown(f"**SDK available in this interpreter:** `{'YES — ibm-watsonx-ai ' + _SDK_ENV['sdk_version'] if _SDK_ENV['sdk_ok'] else 'NO — use .venv (Python 3.13)'}`")
+    st.markdown(f"**Python interpreter:** `{sys.executable}`")
 
-# 2. Edit .env and add your IBM watsonx.ai credentials:
-IBM_GRANITE_API_KEY=your_ibm_api_key
-IBM_GRANITE_PROJECT_ID=your_project_id
+    st.markdown("---")
+    st.markdown("### 📋 .env Setup Instructions")
+    st.code("""# 1. Copy the example file:
+Copy-Item .env.example .env   (PowerShell)
+cp .env.example .env          (Linux/Mac)
+
+# 2. Edit .env — add your IBM watsonx.ai credentials:
+IBM_GRANITE_API_KEY=your_actual_ibm_api_key
+IBM_GRANITE_PROJECT_ID=your_actual_project_id
 IBM_GRANITE_URL=https://us-south.ml.cloud.ibm.com
 
-# 3. Set primary provider (IBM watsonx.ai only):
-PRIMARY_LLM_PROVIDER=granite
+# 3. To enable live AI, remove or comment APP_MODE=demo:
+# APP_MODE=live    # (or just remove the APP_MODE line entirely)
 
-# 4. For demo mode (no real API):
-APP_MODE=demo
-    """, language="bash")
-
-    st.markdown("---")
-    st.markdown("### Current Configuration")
-    st.markdown(f"**APP_MODE:** `{os.getenv('APP_MODE', 'not set (defaults to auto-detect)')}`")
-    st.markdown(f"**PRIMARY_LLM_PROVIDER:** `{os.getenv('PRIMARY_LLM_PROVIDER', 'not set (auto-detect)')}`")
-    st.markdown(f"**IBM_GRANITE_URL:** `{os.getenv('IBM_GRANITE_URL', 'not set')}`")
+# 4. Launch using the .venv interpreter (Python 3.13):
+.venv\\Scripts\\python.exe -m streamlit run app.py --server.port 8503
+# or simply:
+run.bat           (Windows CMD)
+.\\run.ps1        (PowerShell)
+""", language="bash")
 
     st.markdown("---")
-    st.markdown("### Guardrails & Security")
+    st.markdown("### 🛡️ Security & Guardrails")
     st.markdown("""
-    - ✅ API keys stored in `.env` (never in code or frontend)
-    - ✅ Prompt injection detection (regex pattern matching)
-    - ✅ Input length limits (max 10,000 characters)
-    - ✅ Output JSON schema validation
-    - ✅ Human-in-the-loop approval before alert verification
-    - ✅ Demo mode clearly labelled — never disguised as real data
+    - ✅ API keys stored in `.env` only — never in code, frontend, or logs
+    - ✅ `.env` excluded from git via `.gitignore`
+    - ✅ Prompt injection detection (regex pattern matching on all LLM inputs)
+    - ✅ Input length limit: 10,000 characters
+    - ✅ Output JSON schema validation on all agent responses
+    - ✅ Human-in-the-loop approval required before any alert is marked verified
+    - ✅ Demo mode clearly labelled — never disguised as live AI
     - ✅ AI never issues official government warnings
-    - ✅ All outputs include uncertainty and source information
+    - ✅ Live AI mode confirmed only after a genuine Granite response received
+    - ✅ Sample/synthetic data never presented as real observations
+    - ✅ Cyclone AGNI labeled as SAMPLE everywhere — not a real current cyclone
     """)
 
 

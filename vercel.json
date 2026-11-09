@@ -1,0 +1,20 @@
+﻿{
+  "": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/health.py": {
+      "maxDuration": 10
+    },
+    "api/weather.py": {
+      "maxDuration": 15
+    },
+    "api/track.py": {
+      "maxDuration": 10
+    },
+    "api/analyze.py": {
+      "maxDuration": 60
+    },
+    "api/review.py": {
+      "maxDuration": 10
+    }
+  }
+}

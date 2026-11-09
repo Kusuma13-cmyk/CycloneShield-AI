@@ -151,8 +151,14 @@ Return ONLY the JSON object."""
         parsed = _build_fallback_cyclone_output(track_summary)
         log_agent_event(AGENT_NAME, "error", status="error", error_msg="LLM output not JSON — using fallback")
     
+    # Mark data_source accurately
     if llm_response.is_demo:
         parsed["data_source"] = "sample"
+    elif llm_response.provider == "granite" and not llm_response.error:
+        # Live AI assessed — but data_source depends on track data origin
+        if not parsed.get("data_source") or parsed.get("data_source") in ("demo", ""):
+            parsed["data_source"] = "sample"  # track data is still sample CSV
+        parsed["ai_assessed_by"] = f"IBM Granite ({llm_response.model})"
     parsed["timestamp"] = datetime.now(timezone.utc).isoformat()
     parsed["_track_summary"] = track_summary
 

@@ -1,0 +1,8 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.13.17, pytest-9.2.0, pluggy-1.7.0
+rootdir: C:\Users\admin\Downloads\CycloneShield AI
+configfile: pytest.ini
+plugins: anyio-4.16.0
+collected 166 items
+
+tests\test_cycloneshield.py ............................................ [ 26%]

@@ -1,0 +1,38 @@
+# CycloneShield AI — Full Local / Streamlit Dependencies
+# Compatible with Python 3.11–3.14 (NOT Python 3.15+)
+#
+# IMPORTANT: ibm-watsonx-ai requires Python <3.15.
+# Use the project .venv (Python 3.13):
+#   .venv\Scripts\python.exe -m streamlit run app.py --server.port 8503
+#
+# Install: pip install -r requirements-local.txt
+# (run this from within the .venv)
+
+# ── Core UI (Streamlit — local only, not Vercel) ─────────────────────────────
+streamlit>=1.45.1
+
+# ── Data ─────────────────────────────────────────────────────────────────────
+pandas>=2.2.3
+numpy>=2.2.3
+
+# ── Charts/Maps ──────────────────────────────────────────────────────────────
+plotly>=6.0.0
+folium>=0.20.0
+streamlit-folium>=0.25.0
+
+# ── HTTP / API ────────────────────────────────────────────────────────────────
+requests>=2.32.3
+
+# ── AI/LLM — IBM watsonx.ai SDK ─────────────────────────────────────────────
+# Model: ibm/granite-4-h-small (chat model — uses ModelInference.chat())
+# Requires Python <3.15.
+# Docs: https://ibm.github.io/watsonx-ai-python-sdk/
+ibm-watsonx-ai>=1.9.1
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv>=1.1.0
+pydantic>=2.10.6
+tenacity>=9.0.0
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=8.3.4
