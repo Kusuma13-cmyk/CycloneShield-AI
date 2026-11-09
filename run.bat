@@ -18,4 +18,4 @@ echo [CycloneShield AI] Using interpreter: %VENV_PYTHON%
 "%VENV_PYTHON%" -c "import ibm_watsonx_ai; print('[OK] ibm-watsonx-ai', ibm_watsonx_ai.__version__)" 2>NUL || echo [WARN] ibm-watsonx-ai not installed in .venv
 
 echo [CycloneShield AI] Starting on http://localhost:8503
-"%VENV_PYTHON%" -m streamlit run app.py --server.port 8503 --server.address localhost
+"%VENV_PYTHON%" -m streamlit run streamlit_app.py --server.port 8503 --server.address localhost
