@@ -70,7 +70,7 @@ run.bat        # Windows CMD
 .\run.ps1      # PowerShell
 
 # INCORRECT — uses system Python 3.15 which CANNOT import ibm-watsonx-ai:
-# streamlit run app.py    ← DO NOT USE THIS
+# streamlit run streamlit_app.py    ← DO NOT USE THIS
 ```
 
 Open your browser at **http://localhost:8503**
@@ -103,7 +103,7 @@ Copy-Item .env.example .env
 #    (having APP_MODE=demo overrides the credentials and forces demo mode)
 
 # 4. Run
-python -m streamlit run app.py
+python -m streamlit run streamlit_app.py
 ```
 
 When Live AI mode is active, the dashboard shows:
