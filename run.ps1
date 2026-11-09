@@ -22,4 +22,4 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 Write-Host "[CycloneShield AI] Starting on http://localhost:8503" -ForegroundColor Green
-& $VenvPython -m streamlit run app.py --server.port 8503 --server.address localhost
+& $VenvPython -m streamlit run streamlit_app.py --server.port 8503 --server.address localhost
