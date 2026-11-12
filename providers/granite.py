@@ -428,31 +428,56 @@ def _is_not_supported_error(err_str: str) -> bool:
     ))
 
 
+
 def _translate_ibm_error(raw: str) -> str:
-    """Map raw exception message to a friendly error string."""
+    """Map IBM watsonx.ai errors to clear user-friendly messages."""
     r = raw.lower()
+
+    if "token_quota_reached" in r or "quota" in r and "token" in r:
+        return (
+            "IBM watsonx.ai token quota exhausted. "
+            "Granite inference is temporarily unavailable until quota is restored. "
+            "Showing clearly labeled demo/sample results instead."
+        )
+
     if "401" in r or "unauthorized" in r:
         return _IBM_ERROR_MAP["401"]
+
     if "403" in r or "forbidden" in r:
         return _IBM_ERROR_MAP["403"]
+
     if "404" in r or "not found" in r:
         return _IBM_ERROR_MAP["404"]
+
     if "429" in r or "rate limit" in r or "too many" in r:
         return _IBM_ERROR_MAP["429"]
+
     if "500" in r:
         return _IBM_ERROR_MAP["500"]
+
     if "503" in r or "unavailable" in r:
         return _IBM_ERROR_MAP["503"]
+
     if "timeout" in r or "timed out" in r:
         return _IBM_ERROR_MAP["TIMEOUT"]
-    if "connectionerror" in r or "connection refused" in r or "failed to connect" in r:
+
+    if (
+        "connectionerror" in r
+        or "connection refused" in r
+        or "failed to connect" in r
+    ):
         return _IBM_ERROR_MAP["CONNECTION"]
-    # WMLClientError: model not in server-side supported list
-    if "not supported for this environment" in r or "supported models" in r:
+
+    if (
+        "not supported for this environment" in r
+        or "supported models" in r
+    ):
         return _IBM_ERROR_MAP["MODEL_NOT_SUPPORTED"]
-    # Return sanitized version of raw error (max 200 chars, no key-like tokens)
+
     api_key = os.getenv("IBM_GRANITE_API_KEY", "")
     safe = raw[:200]
+
     if api_key:
         safe = safe.replace(api_key, "[REDACTED]")
+
     return f"IBM watsonx.ai error: {safe}"
